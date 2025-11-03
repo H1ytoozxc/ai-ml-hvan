@@ -1,0 +1,240 @@
+# Project EvoArchitect v3 Configuration
+# Пример конфигурации для автономного ИИ-агента
+
+project_name: "Project_EvoArchitect_v3"
+initial_population_size: 3000
+random_seed: 42
+
+# Search Space Configuration
+search_space:
+  base_blocks:
+    - "Conv3x3"
+    - "ResidualBlock"
+    - "TransformerEncoderBlock"
+    - "MLP_Mixer_Block"
+    - "SpikingNeuronLayer"
+    - "GraphConv"
+    - "HyperNetworkBlock"
+  
+  activations:
+    - "ReLU"
+    - "GELU"
+    - "Swish"
+    - "Mish"
+    - "SiLU"
+    - "Tanh"
+  
+  normalizations:
+    - "BatchNorm"
+    - "LayerNorm"
+    - "GroupNorm"
+    - "InstanceNorm"
+    - "WeightNorm"
+  
+  dropout_range: [0.05, 0.5]
+  
+  optimizers:
+    - "AdamW"
+    - "LAMB"
+    - "SGD_Momentum"
+    - "RAdam"
+    - "Adafactor"
+  
+  lr_range: [0.00001, 0.01]
+  
+  lr_schedulers:
+    - "CosineAnnealing"
+    - "OneCycleLR"
+    - "ReduceLROnPlateau"
+    - "ExponentialLR"
+  
+  loss_functions:
+    - "CrossEntropy"
+    - "FocalLoss"
+    - "LabelSmoothing"
+    - "CustomMetaLoss"
+  
+  data_augmentations:
+    - "RandomCrop"
+    - "Cutout"
+    - "Mixup"
+    - "RandAugment"
+    - "AutoAugment"
+    - "CutMix"
+  
+  meta_blocks:
+    - "HyperNet"
+    - "LearnedOptimizer"
+    - "CurriculumLearning"
+    - "DifferentiableAugmentation"
+    - "GradientModificationBlock"
+  
+  max_depth: 20
+  min_depth: 3
+
+# Meta-Optimization Configuration
+meta_optimization:
+  enabled: true
+  strategy: "Evolutionary_Strategy_with_RL_Controller"
+  controller_type: "REINFORCE_Controller"
+  target: "maximize_pareto_frontier_expansion"
+  reward_signal: "performance_improvement_from_stage2 + novelty_gain"
+  learning_rate: 0.001
+  hidden_dim: 256
+  num_episodes: 100
+
+# Runtime Configuration
+runtime:
+  distributed_framework: "Ray_Tune_with_Ray_AIR"
+  scheduler_type: "ASHA"
+  max_t: 100
+  grace_period: 5
+  reduction_factor: 3
+  
+  compute_resources:
+    device: "cuda"  # or "cpu"
+    num_workers_per_trial: 2
+    num_parallel_trials: 2
+    dynamic_resource_allocation: true
+    max_concurrent_trials: 4
+    gpu_memory_limit_gb: null  # null for auto
+  
+  checkpoint_frequency: 5
+  max_retries: 3
+
+# Logging Configuration
+logging:
+  dashboard_provider: "WeightsAndBiases"
+  log_level: "INFO"
+  log_metrics: "all"
+  wandb_project: "evo-architect-v3"
+  wandb_entity: null  # Set your W&B username/team
+  save_top_n: 10
+  artifact_save_path: "./evo_runs"
+
+# Knowledge Base
+knowledge_base_path: "./evo_runs/knowledge_base.db"
+
+# Stage 1 Configuration (Proxy Evaluation)
+stage1_config:
+  name: "Stage1_Proxy_Evaluation"
+  description: "Массовый скрининг 3000+ кандидатов на proxy-данных"
+  input_candidates: 3000
+  epochs: 1
+  
+  datasets:
+    - name: "CIFAR-10"
+      subset_percent: 10
+      strategy: "class_balanced_random_sample"
+  
+  metrics:
+    metrics:
+      - "proxy_accuracy"
+      - "proxy_loss"
+      - "estimated_FLOPs"
+      - "parameter_count"
+    track_memory: true
+    track_vram: true
+    track_flops: true
+  
+  surrogate_model:
+    enabled: true
+    type: "GraphNeuralNetwork"
+    predict_target:
+      - "final_accuracy"
+      - "convergence_speed"
+    hidden_dim: 128
+    num_layers: 4
+  
+  weight_sharing: true
+  
+  selection_criteria:
+    strategy: "dynamic_percentile"
+    value: "top_15_percent"
+    min_candidates: 250
+    max_candidates: 600
+    novelty_score_weight: 0.25
+    diversity_weight: 0.35
+
+# Stage 2 Configuration (Refinement Training)
+stage2_config:
+  name: "Stage2_Refinement_Training"
+  description: "Среднее обучение для выживших кандидатов"
+  input_candidates: "from_Stage1"
+  epochs: 20
+  
+  datasets:
+    - name: "CIFAR-100"
+      subset_percent: 50
+  
+  metrics:
+    metrics:
+      - "accuracy"
+      - "loss"
+      - "robustness_score"
+      - "novelty_score"
+      - "learning_curve_slope"
+  
+  novelty_metric:
+    type: "combined_arch_behavior_distance"
+    weights:
+      architectural: 0.4
+      behavioral: 0.6
+    method: "graph_edit_distance + activation_profile_correlation"
+  
+  robustness_metric:
+    type: "corruption_benchmark"
+    benchmark: "CIFAR-100-C"
+    severities: [1, 3, 5]
+  
+  early_stopping: true
+  early_stopping_patience: 3
+  
+  selection_criteria:
+    strategy: "pareto_frontier_selection"
+    objectives:
+      - "accuracy"
+      - "novelty_score"
+      - "robustness_score"
+      - "learning_curve_slope"
+    top_n: 100
+
+# Stage 3 Configuration (Full Validation)
+stage3_config:
+  name: "Stage3_Full_Validation"
+  description: "Полное обучение и кросс-валидация на нескольких бенчмарках"
+  input_candidates: "from_Stage2"
+  epochs: 100
+  
+  datasets:
+    - name: "CIFAR-100"
+      full: true
+    - name: "ImageNet_subset"
+      classes: 100
+      images_per_class: 1000
+    - name: "SVHN"
+      full: true
+    - name: "TinyImageNet"
+      full: true
+  
+  metrics:
+    metrics:
+      - "accuracy"
+      - "robustness_score"
+      - "convergence_speed_epochs"
+      - "compute_efficiency"
+      - "novelty_score_combined"
+      - "generalization_gap"
+  
+  use_augmentation_policy: "AutoAugment + RandAugment"
+  early_stopping: false
+  
+  selection_criteria:
+    strategy: "final_pareto_frontier_selection"
+    objectives:
+      - "accuracy"
+      - "novelty_score_combined"
+      - "robustness_score"
+      - "compute_efficiency"
+      - "generalization_gap"
+    top_n: 10

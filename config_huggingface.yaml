@@ -1,0 +1,146 @@
+initial_population_size: 10000
+knowledge_base_path: ./evo_runs/knowledge_base.db
+logging:
+  artifact_save_path: ./evo_runs
+  dashboard_provider: WeightsAndBiases
+  log_level: INFO
+  save_top_n: 10
+  wandb_entity: null
+  wandb_project: evo-architect-hf
+meta_optimization:
+  controller_type: REINFORCE_Controller
+  enabled: true
+  hidden_dim: 256
+  learning_rate: 0.001
+project_name: EvoArchitect_HuggingFace
+random_seed: 42
+runtime:
+  compute_resources:
+    device: cuda
+    max_concurrent_trials: 2
+    num_parallel_trials: 2
+search_space:
+  activations:
+  - ReLU
+  - GELU
+  - Swish
+  base_blocks:
+  - Conv3x3
+  - ResidualBlock
+  - TransformerEncoderBlock
+  - MLP_Mixer_Block
+  data_augmentations:
+  - RandomCrop
+  - Cutout
+  - RandAugment
+  dropout_range:
+  - 0.05
+  - 0.3
+  loss_functions:
+  - CrossEntropy
+  - LabelSmoothing
+  lr_range:
+  - 1.0e-05
+  - 0.01
+  lr_schedulers:
+  - CosineAnnealing
+  - OneCycleLR
+  max_depth: 15
+  min_depth: 3
+  normalizations:
+  - BatchNorm
+  - LayerNorm
+  optimizers:
+  - AdamW
+  - SGD_Momentum
+  - RAdam
+stage1_config:
+  dataset_name: cifar100
+  dataset_source: huggingface
+  dataset_subset_size: 5000
+  description: Быстрый скрининг на 10% CIFAR-100
+  epochs: 1
+  input_candidates: all
+  metrics:
+    metrics:
+    - proxy_accuracy
+    - proxy_loss
+    - parameter_count
+  name: Stage1_CIFAR100_Proxy
+  selection_criteria:
+    max_candidates: 300
+    min_candidates: 100
+    strategy: dynamic_percentile
+    value: top_15_percent
+stage2_config:
+  dataset_name: tiny_imagenet
+  dataset_source: huggingface
+  dataset_subset_size: 50000
+  description: Среднее обучение на Tiny ImageNet
+  epochs: 20
+  input_candidates: from_Stage1
+  metrics:
+    metrics:
+    - accuracy
+    - loss
+    - novelty_score
+    - robustness_score
+  name: Stage2_TinyImageNet
+  novelty_metric:
+    type: combined_arch_behavior_distance
+    weights:
+      architectural: 0.4
+      behavioral: 0.6
+  robustness_test:
+    corruptions:
+    - gaussian_noise
+    - shot_noise
+    - impulse_noise
+    dataset: cifar100_c
+    enabled: true
+    severities:
+    - 3
+    - 5
+  selection_criteria:
+    objectives:
+    - accuracy
+    - novelty_score
+    - robustness_score
+    strategy: pareto_frontier_selection
+    top_n: 50
+stage3_config:
+  dataset_name: cifar100
+  dataset_source: huggingface
+  dataset_subset_size: null
+  description: Полная валидация на CIFAR-100
+  epochs: 100
+  input_candidates: from_Stage2
+  metrics:
+    metrics:
+    - accuracy
+    - robustness_score
+    - compute_efficiency
+    - novelty_score_combined
+  name: Stage3_Full_Validation
+  robustness_test:
+    corruptions:
+    - gaussian_noise
+    - shot_noise
+    - impulse_noise
+    - defocus_blur
+    - glass_blur
+    - motion_blur
+    dataset: cifar100_c
+    enabled: true
+    severities:
+    - 1
+    - 3
+    - 5
+  selection_criteria:
+    objectives:
+    - accuracy
+    - novelty_score_combined
+    - robustness_score
+    - compute_efficiency
+    strategy: final_pareto_frontier_selection
+    top_n: 10
